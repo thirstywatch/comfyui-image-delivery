@@ -18,6 +18,16 @@ description: |
 | 微信 / OpenClaw 发起生图 | 自动发原图到微信 |
 | 本地 Claude Code 发起生图 | 不自动发。等用户说"发到 QQ/微信"再手动发送 |
 
+## 🚫 绝对禁止
+
+| 禁止行为 | 原因 |
+|---------|------|
+| ❌ 用 `file://` 链接回复用户 | QQ/微信里点不开，只有 WebUI 能看到 |
+| ❌ 在远程渠道用 MCP `send_media` / `notify_user` | bridge `spawnSync` 必超时 ETIMEDOUT |
+| ❌ 只给路径不调发送脚本 | 用户收不到图片 |
+
+看到图片路径后唯一正确动作：**执行 `send_anima_image.js`**。
+
 ## 发送工具
 
 ### ⚠️ 重要：MCP `send_media` / `notify_user` 不可用于远程渠道
@@ -30,10 +40,10 @@ description: |
 
 ### 方式 1：`send_anima_image.js`（唯一推荐，全渠道通用）
 
+**必须用绝对路径调用，不管当前工作目录在哪：**
+
 ```powershell
-Push-Location "comfyui-manager/workspace"
-node send_anima_image.js --image <path> --channel qq|wechat
-Pop-Location
+node "C:\Users\Xixinglu\comfyui-good-anima\comfyui-manager\workspace\send_anima_image.js" --image "<图片绝对路径>" --channel qq|wechat
 ```
 
 | 渠道 | 底层 | WSL 依赖 |
