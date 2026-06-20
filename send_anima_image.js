@@ -127,6 +127,12 @@ function detectChannel(metadata) {
   return null;
 }
 
+// ── WSL path helpers ─────────────────────────────────────────────
+function windowsToWslPath(winPath) {
+  // E:\AI_DRAW\... → /mnt/e/AI_DRAW/...
+  return "/mnt/" + winPath.replace(/^([A-Za-z]):/, (_, d) => d.toLowerCase());
+}
+
 // ── WSL health check ─────────────────────────────────────────────
 function wslHealthy(timeoutMs = 8000) {
   try {
@@ -141,8 +147,38 @@ function wslHealthy(timeoutMs = 8000) {
   }
 }
 
+// ── Stage file to WSL workspace (Docker sandbox accessible) ──────
+function stageToWslWorkspace(imagePath) {
+  const filename = path.basename(imagePath);
+  const wslMediaDir = "/home/xixinglu/openclaw/workspace/cc-bridge/media";
+  const wslStagedPath = `${wslMediaDir}/${Date.now()}-${filename}`;
+  const sandboxPath = `/workspace/cc-bridge/media/${path.basename(wslStagedPath)}`;
+
+  try {
+    spawnSync("wsl", [
+      "bash", "-c",
+      `mkdir -p ${wslMediaDir} && cp "${windowsToWslPath(imagePath)}" "${wslStagedPath}"`
+    ], { timeout: 30000, encoding: "utf8", windowsHide: true });
+    console.error(`[wechat] Staged to WSL: ${wslStagedPath}`);
+    return sandboxPath;
+  } catch (err) {
+    console.error(`[wechat] Failed to stage file to WSL: ${err.message}`);
+    return null;
+  }
+}
+
 // ── Send to WeChat via cc-openclaw-bridge IPC ─────────────────────
 function sendToWeChat(imagePath, caption) {
+  // Docker 沙箱无法访问 Windows 路径，必须先暂存到 WSL workspace
+  const sandboxPath = stageToWslWorkspace(imagePath);
+  if (!sandboxPath) {
+    return {
+      channel: "wechat",
+      status: "error",
+      error: "Failed to stage image to WSL workspace",
+    };
+  }
+
   const bridgeIpcDir = path.join(os.homedir(), ".cc-openclaw-bridge");
   mkdirp(bridgeIpcDir);
 
@@ -151,7 +187,7 @@ function sendToWeChat(imagePath, caption) {
     id,
     type: "notify",
     message: caption || "ComfyUI 生图完成",
-    media: imagePath,
+    media: sandboxPath,  // Docker 沙箱可访问的路径
     caption: caption || "",
     project: "comfyui",
     context: "ComfyUI 生图完成",
@@ -160,8 +196,9 @@ function sendToWeChat(imagePath, caption) {
 
   const pendingFile = path.join(bridgeIpcDir, `${id}.json`);
   fs.writeFileSync(pendingFile, JSON.stringify(pending, null, 2), "utf8");
-  console.error(`[wechat] Pending file written: ${pendingFile}`);
-  console.error(`[wechat] Image: ${imagePath}`);
+  console.error(`[wechat] Pending file: ${pendingFile}`);
+  console.error(`[wechat] Sandbox path: ${sandboxPath}`);
+  console.error(`[wechat] Original: ${imagePath}`);
 
   // Probe WSL health before attempting agent trigger
   if (!wslHealthy()) {
@@ -171,15 +208,15 @@ function sendToWeChat(imagePath, caption) {
       channel: "wechat",
       pending_id: id,
       pending_file: pendingFile,
+      sandbox_path: sandboxPath,
       triggered: false,
-      note: "WSL unreachable. Image will be picked up by heartbeat polling.",
+      note: "WSL unreachable. Image staged to workspace, will be picked up by heartbeat.",
     };
   }
 
-  // Fire-and-forget: use async spawn so we don't block on slow WSL
-  // The pending file is already written — OpenClaw agent will process it
+  // Fire-and-forget: async spawn so we don't block on slow WSL
   try {
-    const agentMsg = `[CC-Bridge] ComfyUI: ${path.basename(imagePath)}`;
+    const agentMsg = `[CC-Bridge] ComfyUI 图片已生成，请发送给用户\nMEDIA:${sandboxPath}`;
     const child = spawn("wsl", [
       "bash", "-lc",
       `OPENCLAW_CONFIG_PATH=/home/xixinglu/openclaw/openclaw.json ` +
@@ -204,8 +241,9 @@ function sendToWeChat(imagePath, caption) {
     channel: "wechat",
     pending_id: id,
     pending_file: pendingFile,
+    sandbox_path: sandboxPath,
     triggered: true,
-    note: "Agent triggered asynchronously. Delivery will complete when agent finishes processing.",
+    note: "File staged to WSL workspace, agent triggered asynchronously.",
   };
 }
 
