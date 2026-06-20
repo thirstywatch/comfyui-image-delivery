@@ -312,8 +312,8 @@ function sendToQQ(imagePath, caption) {
     ws.on("message", (data) => {
       try {
         const resp = JSON.parse(data.toString());
-        // Skip lifecycle meta events, wait for actual response
-        if (resp.meta_event_type || resp.post_type === "meta_event") return;
+        // Skip lifecycle meta events and notices, wait for actual response
+        if (resp.meta_event_type || resp.post_type === "meta_event" || resp.post_type === "notice") return;
         clearTimeout(timeout);
         console.error(`[qq] Response: ${JSON.stringify(resp)}`);
         if (resp.status === "ok" || resp.retcode === 0) {
