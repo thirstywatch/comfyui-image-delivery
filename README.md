@@ -10,8 +10,9 @@ ComfyUI Anima 生图后，通过 QQ 和微信发送图片时只能收到**缩略
 
 | 项目 | 用途 | 链接 |
 |------|------|------|
-| comfyui-good-anima | ComfyUI Anima 生图技能包（生图引擎） | [GitHub](https://github.com/thirstywatch/comfyui-good-anima) |
-| OpenClaw Weixin Plugin | 微信通道插件（图片最终通过它发送到微信） | `@tencent-weixin/openclaw-weixin` |
+| comfyui-good-anima | ComfyUI Anima 生图技能包（生图引擎） | [GitHub](https://github.com/ShiroEirin/comfyui-good-anima) |
+| OpenClaw Weixin Plugin | 微信通道插件（图片最终通过它发送到微信） | [npm](https://www.npmjs.com/package/@tencent-weixin/openclaw-weixin) |
+| OpenClaw | AI Agent Gateway（小雪运行的平台） | [GitHub](https://github.com/openclaw/openclaw) |
 | cc-connect | QQ 通道桥接（Claude Code ↔ NapCatQQ） | [GitHub](https://github.com/chenhg5/cc-connect) |
 | NapCatQQ | QQ 机器人框架（OneBot v11 协议） | [GitHub](https://github.com/NapNeko/NapCatQQ) |
 | cc-openclaw-bridge | Claude Code ↔ OpenClaw 双向通信桥 | [GitHub](https://github.com/totorospirit/cc-openclaw-bridge) |
