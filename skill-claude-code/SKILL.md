@@ -20,46 +20,44 @@ description: |
 
 ## 发送工具
 
-### 方式 1：`send_anima_image.js`（推荐，渠道感知）
+### ⚠️ 重要：MCP `send_media` / `notify_user` 不可用于远程渠道
+
+`cc-openclaw-bridge` 的 MCP 工具内部使用 `spawnSync("wsl", ...)` 同步阻塞调用，WSL 冷启动 + agent session 初始化耗时会超过 bridge 的 timeout 上限，导致 `ETIMEDOUT`。
+
+**规则**：
+- **QQ / 微信远程生图**：禁止用 MCP 工具。必须直接调 `send_anima_image.js`
+- **本地 CC 手动发送**：可以用 MCP 工具（用户在终端，超时可以重试）
+
+### 方式 1：`send_anima_image.js`（唯一推荐，全渠道通用）
 
 ```powershell
 Push-Location "comfyui-manager/workspace"
-node send_anima_image.js --manifest <manifest_path> --channel qq|wechat|auto
+node send_anima_image.js --image <path> --channel qq|wechat
 Pop-Location
 ```
 
-- `--manifest`：cache_anima_outputs.js 生成的 `.manifest.json` 文件路径
-- `--image`：也可以直接传图片绝对路径（跳过 manifest）
-- `--channel auto`：从环境变量 `CC_CHANNEL` 或 manifest 元数据自动检测
-- `--channel qq`：强制发 QQ（需 NapCat 运行中）
-- `--channel wechat`：强制发微信（需 OpenClaw Gateway 运行中）
-- `--caption`：可选文字说明
+| 渠道 | 底层 | WSL 依赖 |
+|------|------|---------|
+| `--channel qq` | NapCat WebSocket 直连 (127.0.0.1:3001) | ❌ 不需要 |
+| `--channel wechat` | 写 bridge IPC 文件 + WSL 异步 fire-and-forget | ✅ 内置 WSL 健康探测 |
 
-**输出 JSON**：
-```json
-{
-  "status": "sent",
-  "image_path": "E:\\AI_DRAW\\ComfyUI-aki-v3\\ComfyUI\\output\\anima\\2026-06-20\\...",
-  "channel": "wechat",
-  "triggered": true
-}
-```
+QQ 通道直接 WebSocket → NapCat → QQ，1-2s 完成，不经过 WSL。
+微信通道写入 pending 文件后异步触发 agent，不阻塞等待返回。
 
-### 方式 2：MCP `notify_user` / `send_media`（本地 CC 手动发送时）
+### 方式 2：MCP `notify_user` / `send_media`（仅限本地 CC）
 
 ```
 notify_user(
-  message: "🎨 图片已生成 | prompt_id: xxx | 1024×1536",
-  media: { path: "E:\\AI_DRAW\\ComfyUI-aki-v3\\ComfyUI\\output\\anima\\..." }
+  message: "🎨 图片已生成",
+  media: { path: "E:\\..." }
 )
 ```
 
-**注意**：`send_media` 通过 WSL → OpenClaw → 微信发送，WSL 冷启动可能慢（~10-30s）。
-如果 WSL 不通，pending 文件仍会写入，OpenClaw heartbeat 会在 ~30s 内捡起发送。
+仅限本地 Claude Code 用户手动发送时使用。远程渠道禁止，会超时。
 
-### 方式 3：QQ CQ 码直发（仅 QQ）
+### 方式 3：QQ CQ 码直发（仅 QQ，cc-connect 会话中可用）
 
-当 Claude Code 通过 cc-connect 连接到 QQ 时，可以直接在回复中嵌入 CQ 码：
+当 Claude Code 通过 cc-connect 连接到 QQ 时，可直接在回复中嵌入 CQ 码：
 
 ```
 [CQ:image,file=file:///E:/AI_DRAW/ComfyUI-aki-v3/ComfyUI/output/anima/2026-06-20/image.png]
@@ -85,13 +83,23 @@ notify_user(
 
 ## 生图完成后的标准流程
 
+### QQ / 微信远程请求（自动全链路）
+
 ```
-1. ComfyUI submit/run → 拿到 prompt_id
-2. 用户要求看结果时：cache_anima_outputs.js → 生成 manifest
-3. 判断渠道：
-   - QQ/微信请求 → node send_anima_image.js --manifest <path> --channel auto
-   - 本地请求 → 展示路径，等用户指令
-4. 用户说"发到 XX" → node send_anima_image.js --manifest <path> --channel XX
+1. node run_workflow_args.js run <workflow> <args>   # 阻塞等待
+2. node cache_anima_outputs.js                        # 缓存 → manifest
+3. node send_anima_image.js --image <path> --channel qq|wechat  # 直接发
+4. 回复用户文字摘要（无需贴图片链接，图片已自动送达）
+```
+
+⚠️ **严禁**在远程渠道使用 MCP `send_media` / `notify_user`——会 `ETIMEDOUT`。
+
+### 本地 Claude Code 请求（手动触发）
+
+```
+1. node run_workflow_args.js submit <workflow> <args>  # 非阻塞
+2. 告知用户 prompt_id 和进度
+3. 用户说"发到 XX" → cache → node send_anima_image.js --image <path> --channel XX
 ```
 
 ## WSL 健康探测（避免盲重试）
